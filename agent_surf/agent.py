@@ -6,28 +6,22 @@ from langchain.chat_models.anthropic import ChatAnthropic
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
 
-from crawler import Crawler
-from templates import BROWSER_PROMPT_TEMPLATE
-
-prompt_template = PromptTemplate.from_template(BROWSER_PROMPT_TEMPLATE)
-llm = ChatAnthropic(model_name="claude-2", temperature=0)
-# llm = ChatOpenAI(temperature=0)
-
-chain = prompt_template | llm.bind(stop=["</command>"]) | StrOutputParser()
+from agent_surf.crawler import Crawler
+from agent_surf.prompts import BROWSER_PROMPT_TEMPLATE
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="A simple argument parser example.")
-    parser.add_argument("--objective", type=str, help="Objective")
+def _build_llm_chain():
+    prompt_template = PromptTemplate.from_template(BROWSER_PROMPT_TEMPLATE)
+    llm = ChatAnthropic(model_name="claude-2", temperature=0)
 
-    args = parser.parse_args()
-    # objective = """
-    # "I want to go through the password reset (forgot password) for my EE account with email 'johnsmith@gmail.com'"
-    # """
-    start_page = "www.duckduckgo.com"
+    return prompt_template | llm.bind(stop=["</command>"]) | StrOutputParser()
 
+
+def run_agent(objective, start_page):
     crawler = Crawler()
     crawler.go_to_page(start_page)
+
+    chain = _build_llm_chain()
 
     previous_command = ""
     while True:
@@ -37,7 +31,7 @@ if __name__ == "__main__":
             chain.invoke(
                 {
                     "browser_content": "\n".join(browser_content),
-                    "objective": args.objective,
+                    "objective": objective,
                     "url": crawler.page.url,
                     "previous_command": previous_command,
                 }
@@ -47,6 +41,7 @@ if __name__ == "__main__":
         print(res)
         root = ET.fromstring("<root>" + res + "</root>")
         thought_text = root.find("thought").text.strip()
+        print(f"Thought: {thought_text}")
         commands = (
             root.find("command").text.strip().split("\n")
         )  # in case multiple commands issued
